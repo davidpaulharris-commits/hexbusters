@@ -1,107 +1,97 @@
-# Wreckers of Porthcove
+# Rush Hour 🏁
 
-A hidden-role party game for one room and many phones, for 4–12 players.
-One person hosts. Everyone else taps a link (or scans a QR code) and plays in their phone's browser.
-Nobody needs an account or an app.
+A family race game for phones. Everyone makes their own character, gets their own copy of the same map, and races to finish all their jobs first. The last person has to take a silly photo, and it pops up on everyone's phone.
 
-The site is plain HTML hosted on **Netlify**. **Supabase** keeps the game state and passes moves between phones in real time.
+- 2 to 10 players, each on their own phone
+- 4 maps, each with 5 mini-games and its own ending: **School** (the bell rings and the school bus comes), **Bank** (the alarm goes off and money rains down), **Shopping Centre** (closing-time announcement and the lights go off shop by shop) and **Town** (the clock strikes, night falls and the street lamps come on)
+- Rounds last 5 to 30 minutes. Longer rounds have more jobs (5 minutes = 5 jobs, 30 minutes = 15 jobs)
+- Power-ups on the map: ⚡ speed boost, ⏭️ skip a job, ❄️ freeze someone's screen, 🎨 paint-splat someone's screen
+- **Age-based difficulty:** each player enters their age in the character creator. The maths sums, spelling words, money-counting jobs, vault code and memory games get easier or harder to match, so a 6-year-old and a grown-up can race fairly. The age stays on that phone and isn't sent anywhere.
+- **Practice mode** works straight away with no setup. You race three robots on one phone.
 
 ---
 
-## Setup (about 15 minutes, once)
+## Setting it up (about 15 minutes)
 
-### 1. Supabase: create the game table
+You need your **Supabase**, **GitHub** and **Netlify** accounts.
 
-You can use your existing Supabase project; everything here is named `wreckers_…` so it won't touch anything else. A separate free project works just as well.
+### 1. Set up the database in Supabase
 
-1. Open your project at [supabase.com/dashboard](https://supabase.com/dashboard).
-2. Go to **SQL Editor → New query**.
-3. Open `supabase/setup.sql` from this folder, copy all of it, paste it in and press **Run**.
-   You should see *"Success. No rows returned."*
+1. Go to [supabase.com](https://supabase.com) and open a project. You can use the same project as your other games, because everything for Rush Hour starts with `rh_` so nothing clashes. Or you can make a new one.
+2. In the left menu, click **SQL Editor**, then **New query**.
+3. Open `supabase/schema.sql` from this folder, copy all of it, paste it in, and press **Run**. You should see "Success".
+4. Go to **Project Settings → API** (or press **Connect** at the top of the project). Copy two things:
+   - the **Project URL** (looks like `https://abcdefgh.supabase.co`)
+   - the **anon public** key (newer projects call it the **publishable** key)
 
-### 2. Supabase: copy your two keys
+### 2. Add your keys to the game
 
-1. Click **Connect** at the top of the dashboard, or go to **Project Settings → API Keys**.
-2. Copy the **Project URL**. It looks like `https://abcdefgh.supabase.co`.
-3. Copy the **publishable key** (starts `sb_publishable_…`). Older projects call it the **anon / public** key; either works.
-   Never use the *secret* or *service_role* key here.
-
-### 3. Put the keys in `config.js`
-
-Open `config.js` and replace the two placeholder values:
+Open `js/config.js` and paste them between the quotes:
 
 ```js
-window.WRECKERS_CONFIG = {
-  supabaseUrl: "https://abcdefgh.supabase.co",
-  supabaseAnonKey: "sb_publishable_xxxxxxxxxxxxxxxx"
+window.RUSH_CONFIG = {
+  SUPABASE_URL: 'https://abcdefgh.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOi...your key...',
 };
 ```
 
-This key is designed to be public, so committing it to GitHub is fine.
-The database only allows the three game functions in `setup.sql`, and only the host's phone can change a game.
+These keys are meant to be public, so it's fine for them to go on GitHub. The database only lets people change games through the game's own rules.
 
-### 4. GitHub: make a repo
+### 3. Put it on GitHub
 
-1. On GitHub, click **New repository**, call it something like `wreckers-of-porthcove`, and create it.
-2. Click **uploading an existing file**, then drag in **everything in this folder**, keeping the `vendor` and `supabase` folders.
-3. Click **Commit changes**.
+1. On [github.com](https://github.com), click **New repository**, call it `rush-hour`, and click **Create repository**.
+2. Click **uploading an existing file**, drag in **everything inside this folder** (not the folder itself), and click **Commit changes**.
 
-### 5. Netlify: deploy
+### 4. Publish it with Netlify
 
-1. In Netlify: **Add new site → Import an existing project → GitHub**, then pick the repo.
-2. Leave the build settings empty (`netlify.toml` already says "no build, publish this folder").
-3. Click **Deploy**.
-4. Optional: **Site configuration → Change site name** to get something like `wreckers-porthcove.netlify.app`.
+1. On [netlify.com](https://app.netlify.com), click **Add new site → Import an existing project → GitHub** and pick `rush-hour`.
+2. Leave the build command **empty**. The publish directory is `.` (the `netlify.toml` file already sets this). Click **Deploy**.
+3. After a minute you'll get a link like `https://something.netlify.app`. You can rename it under **Site configuration → Change site name**, for example `rush-hour-family`.
 
-From now on, any change you commit on GitHub goes live automatically within a minute.
-
-### 6. Test with two phones
-
-Open the site on one phone, make a character and press **Host a new game**.
-On a second phone, scan the QR code on the host's screen. If the second phone appears under "Crew aboard", everything works.
-To try a whole game alone, use **Add a practice bot** in the lobby.
+From now on, whenever you change a file on GitHub, Netlify updates the site by itself.
 
 ---
 
-## Playing on the night
+## How to play
 
-1. **The host** opens the site, makes a character and taps **Host a new game**. Choose **Host and play**, or **Narrate only** to put the host screen on a laptop or TV.
-2. Tap **Share link** to send it to the family chat, or let people scan the QR code.
-3. Everyone taps the link, makes a character, and appears in the lobby.
-4. With 4 or more aboard, the host taps **Cast off**.
+1. One person taps **Host a game** and makes their character.
+2. Everyone else scans the QR code, taps the shared link, or types the 4-letter code into **Join a game**.
+3. The host picks a map (or 🎲 Random) and the round length, then taps **Start the race!**
+4. Tap the map to walk, or open **📋 Tasks** and tap a job to walk straight to it. Walk onto a glowing marker to start that job.
+5. Pick up power-ups as you go. When you're holding a ❄️ or 🎨, tap the purple button to use it on someone.
+6. The first person to finish every job wins. If the timer runs out, whoever has done the most wins.
+7. Whoever comes last takes a silly photo, and it pops up on everyone's phone. Photos are never saved anywhere, they only travel to the other phones.
+8. The host can tap **Play again** for another round with the same people.
 
-**Keep the host's screen awake.** The game runs on the host's phone. If it locks or loses signal, the game pauses and carries on when it's back.
-If the host's page reloads, it picks up where it left off, as long as it's the same phone and browser.
-
-For 4–5 players a game takes about 15–20 minutes, so play a few rounds; the leaderboard keeps a running total.
-With 8 or more, one game fills 45–60 minutes.
+**Tip:** on a phone, use **Share → Add to Home Screen** and Rush Hour will open full-screen like an app.
 
 ---
 
 ## If something goes wrong
 
-| What you see | What to check |
+| Problem | Fix |
 |---|---|
-| A **"Practice mode"** banner | `config.js` still has the placeholder values, or the file didn't upload. |
-| **"Couldn't reach the game server"** when hosting | `setup.sql` hasn't been run, or the URL or key in `config.js` is wrong. |
-| Players stuck on **"Signing you aboard…"** | In Supabase, **Realtime → Settings**: make sure *"Allow public access"* is on (private-only channels must be off). |
-| **"There's no game with the code…"** | The code is wrong, or the game is more than 3 days old (old games are tidied away). |
-| One phone is out of step | Reload that phone. It rejoins with its role and notes intact. |
+| "The database is not set up yet" | Run `supabase/schema.sql` in the Supabase SQL Editor (step 1). |
+| Host and Join buttons are greyed out | `js/config.js` doesn't have your Supabase URL and key yet (step 2). |
+| "We couldn't find a game with that code" | Check the code on the host's phone. Games are cleared away after a day. |
+| Freezes, paint splats or the silly photo don't reach other phones | In Supabase, go to **Realtime → Settings** and make sure public channels are allowed (turn off "private channels only"). |
+| The camera won't open for the silly photo | The phone will offer to use the camera app, or to send a cartoon silly face instead. The camera needs the `https://` Netlify link, not a file on the computer. |
+| Someone's phone went to sleep | Just wake it up. The game catches up, and refreshing the page rejoins the same game. |
 
 ## What's in the folder
 
 ```
-index.html          the whole game: screens, rules, host engine
-config.js           your Supabase URL and public key
-vendor/supabase.js  Supabase client library (v2.117.3)
-vendor/qrcode.js    QR code generator for the lobby
-supabase/setup.sql  one-time database setup
-netlify.toml        tells Netlify there's no build step
+index.html            the page
+css/style.css         how it looks
+js/config.js          your Supabase details  ← the only file you need to edit
+js/app.js             screens: home, character creator, lobby, game, results
+js/game.js            walking around the map
+js/maps.js            the four maps
+js/tasks.js           the 20 mini-games
+js/difficulty.js      age-based maths, spelling and money questions
+js/avatar.js          drawing the characters
+js/net.js             talking to Supabase (and the practice robots)
+js/vendor/            Supabase and QR-code libraries (bundled, nothing to install)
+supabase/schema.sql   the database setup
+netlify.toml          Netlify settings
 ```
-
-## How it works (for the curious)
-
-- The **host's phone is the referee**. It holds the secret roles and the rules, and saves the public game state to Supabase after every move.
-- Other phones read that state and send their moves through a Supabase Realtime channel.
-- **Secret information is encrypted** between each phone and the host's phone. Roles, night choices and votes before they're revealed are unreadable to anyone else, even if they snoop on the network or the database.
-- Notes are stored only on the phone that wrote them, until you table one as evidence.
