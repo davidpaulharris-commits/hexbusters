@@ -361,6 +361,20 @@ function validPub(p){return p&&typeof p.x==='string'&&typeof p.y==='string'&&p.x
 const S={ready:false,pid:null,keys:null,profile:LS.get('wc-profile',null),view:'home',tab:'play',code:null,game:null,secret:null,secretSig:null,notes:[],draft:{},myActs:{},lastBox:null,pendingEv:[],hostSeen:true,practice:false,sound:LS.get('wc-sound',false),room:null,poll:null,err:null,toast:null,seenMsgs:LS.get('wc-seen',[]),revealItems:false,newEv:false};
 const H={g:null,p:null,writing:false,dirty:false,pubs:{},lastAct:{},encCache:{},keyCache:{},hostPriv:null,tick:null,privWriting:false,privDirty:false,fails:0};
 
+/* ---------------- Clock sync ----------------
+   Timers, lamp flashes and barrel reveals are set in the host's clock. Each broadcast carries
+   the host's send time; (hostSent - localReceived) = offset - network delay, so the largest
+   recent sample is the best estimate of how far this phone's clock is from the host's. */
+const CLOCK={samples:[],off:0};
+function clockSample(sentAt){
+ if(typeof sentAt!=='number'||H.g)return;
+ const now=Date.now();
+ CLOCK.samples.push({d:sentAt-now,at:now});
+ CLOCK.samples=CLOCK.samples.filter(x=>now-x.at<180000).slice(-20);
+ CLOCK.off=Math.max(...CLOCK.samples.map(x=>x.d));
+}
+const hostNow=()=>Date.now()+(H.g?0:CLOCK.off);
+
 /* ---------------- Backend: Supabase for shared play, in-memory for practice ---------------- */
 let BE=null;
 function makeBackend(){
@@ -382,7 +396,7 @@ function supabaseRoom(sb,code){
  const peerFns=[],stateFns=[];let prev={},mineP=null,joined=false;
  const list=()=>{const st=ch.presenceState(),out=[];for(const k in st){const metas=st[k]||[];const pr=Object.assign({},metas[metas.length-1]||{});delete pr.presence_ref;out.push({peer:k,by:null,isMe:k===S.pid,kind:'viewer',presence:pr})}return out};
  ch.on('presence',{event:'sync'},()=>{const ps=list(),j=[],u=[],now={};for(const p of ps){const s=JSON.stringify(p.presence);now[p.peer]=s;if(!(p.peer in prev))j.push(p);else if(prev[p.peer]!==s)u.push(p)}const left=Object.keys(prev).filter(k=>!(k in now)).map(k=>({peer:k}));prev=now;peerFns.forEach(f=>f({peers:ps,joined:j,updated:u,left}))});
- ch.on('broadcast',{event:'state'},m=>{const s=m&&m.payload&&m.payload.s;if(s)stateFns.forEach(f=>f(s))});
+ ch.on('broadcast',{event:'state'},m=>{const s=m&&m.payload&&m.payload.s;if(m&&m.payload)clockSample(m.payload.t);if(s)stateFns.forEach(f=>f(s))});
  ch.subscribe(status=>{
   if(status==='SUBSCRIBED'){joined=true;if(S.roomErr){S.roomErr=false;render()}if(mineP)ch.track(mineP).catch(()=>{});S.onRoomUp&&S.onRoomUp()}
   else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){joined=false;S.roomErr=true;render()}
@@ -393,8 +407,9 @@ function supabaseRoom(sb,code){
   onPeers:f=>{peerFns.push(f)},
   onState:f=>{stateFns.push(f)},
   peers:()=>list(),
-  sendState:s=>{if(joined)ch.send({type:'broadcast',event:'state',payload:{s}}).catch(()=>{})},
+  sendState:s=>{if(joined)ch.send({type:'broadcast',event:'state',payload:{s,t:Date.now()}}).catch(()=>{})},
   leave:()=>{try{sb.removeChannel(ch)}catch(e){}},
+  ping:()=>{if(joined)ch.send({type:'broadcast',event:'state',payload:{t:Date.now()}}).catch(()=>{})},
   connected:()=>joined,
  };
 }
@@ -517,6 +532,7 @@ function leaveGame(silent){
  if(S.room){try{S.room.leave()}catch(e){}S.room=null}
  if(S.poll){clearInterval(S.poll);S.poll=null}
  if(H.tick){clearInterval(H.tick);H.tick=null}
+ if(H.clockT){clearInterval(H.clockT);H.clockT=null}
  H.g=null;H.p=null;H.key=null;H.pubs={};H.lastAct={};H.encCache={};H.keyCache={};
  LS.del('wc-current');S.code=null;S.game=null;S.secret=null;S.secretSig=null;S.view='home';S.lastPres=null;S.hostLost=false;S.onRoomUp=null;S.hostSeen=true;S.roomErr=false;
  setUrl(null);render();
@@ -576,6 +592,7 @@ async function hostStartRuntime(){
   S.onRoomUp=()=>{if(!H.g)return;S.room.sendState(clone(H.g));for(const p of S.room.peers())hostPeer(p)};
  }
  if(!H.tick)H.tick=setInterval(hostTick,400);
+ if(!H.clockT)H.clockT=setInterval(()=>{if(H.g&&S.room)S.room.ping&&S.room.ping()},20000);
  wake();
 }
 function hostCommit(){
@@ -1323,7 +1340,7 @@ function crewView(){
 
 /* ---------------- Live UI: countdowns, lamps, cargo ---------------- */
 function tickUI(){
- const now=Date.now();
+ const now=hostNow();
  document.querySelectorAll('[data-ends]').forEach(el=>{el.textContent=mmss(+el.dataset.ends-now)});
  document.querySelectorAll('[data-meter]').forEach(el=>{const d=+el.dataset.dur,r=Math.max(0,+el.dataset.meter-now);el.style.transform=`scaleX(${d?Math.min(1,r/d):0})`});
  const L=document.getElementById('lamps');
@@ -1335,7 +1352,7 @@ setInterval(tickUI,120);
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function drawCargo(c,now){
  const x=c.getContext('2d'),W=c.width,Hh=c.height,show=c.dataset.show,rv=c.dataset.reveal;
- const vis=rv||(show&&now>=+show&&now<+show+4000);
+ const vis=rv||(show&&now>=+show);
  const state=vis?'on':(show&&now<+show)?'wait':'off';
  if(c._state===state&&state!=='wait')return;c._state=state;
  x.fillStyle='#0d2228';x.fillRect(0,0,W,Hh);
@@ -1391,8 +1408,8 @@ async function act(a,v,pid,b){
   case 'night-t':S.draft.nt=pid;render();return;
   case 'night-send':{const sent=mine()||{};const w=S.draft.nw||sent.whisper,t=S.draft.nt||sent.target;return sendAct({whisper:w,target:t})}
   case 'offer':return sendAct({accept:v==='1'});
-  case 'trivia':return sendAct({a:+v,t:Date.now()-(g.mission.t0||Date.now())});
-  case 'lamp':{const seq=(S.draft.seq||[]).concat(+v);S.draft.seq=seq;if(seq.length>=g.mission.seq.length){return sendAct({seq,t:Date.now()-(g.mission.t0||Date.now())})}render();return}
+  case 'trivia':return sendAct({a:+v,t:hostNow()-(g.mission.t0||hostNow())});
+  case 'lamp':{const seq=(S.draft.seq||[]).concat(+v);S.draft.seq=seq;if(seq.length>=g.mission.seq.length){return sendAct({seq,t:hostNow()-(g.mission.t0||hostNow())})}render();return}
   case 'lamp-clear':S.draft.seq=[];render();return;
   case 'cargo-send':{const n=parseInt(S.draft['cargo-n'],10);if(!isFinite(n)){S.toast={x:'Type a number of barrels first.'};render();return}return sendAct({n})}
   case 'boat':return sendAct({take:v==='1'});
